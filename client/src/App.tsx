@@ -1,4 +1,5 @@
-import { Switch, Route, useLocation, Router } from "wouter";
+import React from "react";
+import { Switch, Route, Router } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
@@ -15,20 +16,48 @@ function useBaseLocation(): [
   string,
   (to: string, options?: { replace?: boolean }) => void
 ] {
-  const [location, setLocation] = useLocation();
-
-  // Strip the base path from the location for matching
-  const pathWithoutBase = location.startsWith(basePath)
-    ? location.slice(basePath.length) || "/"
-    : location;
-
-  // Create a setter that adds the base path back
-  const setLocationWithBase = (to: string, options?: { replace?: boolean }) => {
-    const newPath = basePath + (to.startsWith("/") ? to : "/" + to);
-    setLocation(newPath, options);
+  // Use the browser's location API directly
+  const getLocation = () => {
+    if (typeof window === "undefined") return "/";
+    const path = window.location.pathname;
+    if (basePath && path.startsWith(basePath)) {
+      const stripped = path.slice(basePath.length);
+      return stripped || "/";
+    }
+    return path || "/";
   };
 
-  return [pathWithoutBase, setLocationWithBase];
+  const [location, setLocationState] = React.useState(() => {
+    // Initialize with current location
+    return getLocation();
+  });
+
+  const setLocation = React.useCallback(
+    (to: string, options?: { replace?: boolean }) => {
+      const newPath = basePath + (to.startsWith("/") ? to : "/" + to);
+      if (options?.replace) {
+        window.history.replaceState(null, "", newPath);
+      } else {
+        window.history.pushState(null, "", newPath);
+      }
+      // Update state immediately
+      setLocationState(getLocation());
+      // Trigger a popstate event to notify wouter
+      window.dispatchEvent(new PopStateEvent("popstate"));
+    },
+    []
+  );
+
+  React.useEffect(() => {
+    const handlePopState = () => {
+      setLocationState(getLocation());
+    };
+
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, [basePath]);
+
+  return [location, setLocation];
 }
 
 function AppRouter() {
