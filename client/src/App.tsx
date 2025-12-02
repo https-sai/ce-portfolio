@@ -16,8 +16,8 @@ function useBaseLocation(): [
   string,
   (to: string, options?: { replace?: boolean }) => void
 ] {
-  // Use the browser's location API directly
-  const getLocation = () => {
+  const [location, setLocationState] = React.useState(() => {
+    // Initialize with current location
     if (typeof window === "undefined") return "/";
     const path = window.location.pathname;
     if (basePath && path.startsWith(basePath)) {
@@ -25,11 +25,6 @@ function useBaseLocation(): [
       return stripped || "/";
     }
     return path || "/";
-  };
-
-  const [location, setLocationState] = React.useState(() => {
-    // Initialize with current location
-    return getLocation();
   });
 
   const setLocation = React.useCallback(
@@ -40,17 +35,22 @@ function useBaseLocation(): [
       } else {
         window.history.pushState(null, "", newPath);
       }
-      // Update state immediately
-      setLocationState(getLocation());
-      // Trigger a popstate event to notify wouter
-      window.dispatchEvent(new PopStateEvent("popstate"));
+      // Use the 'to' parameter directly since we just set it
+      // This avoids reading window.location which might not be updated yet
+      const newLocation = to.startsWith("/") ? to : "/" + to;
+      setLocationState(newLocation);
     },
-    []
+    [basePath]
   );
 
   React.useEffect(() => {
     const handlePopState = () => {
-      setLocationState(getLocation());
+      const path = window.location.pathname;
+      const newLocation =
+        basePath && path.startsWith(basePath)
+          ? path.slice(basePath.length) || "/"
+          : path || "/";
+      setLocationState(newLocation);
     };
 
     window.addEventListener("popstate", handlePopState);
